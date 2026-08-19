@@ -26,7 +26,7 @@ import sys
 import webbrowser
 
 from accatool import (config, data, demo, fixtures_csv, model, names,
-                      odds as odds_mod, rank, report)
+                      odds as odds_mod, oddsapi, rank, report)
 
 
 def next_saturday(from_date: dt.date | None = None) -> dt.date:
@@ -133,10 +133,11 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Build the 3pm acca shortlist.")
     ap.add_argument("command", nargs="?", default="run",
                     choices=["run", "verify", "doctor"])
-    ap.add_argument("--source", choices=["free", "api"], default="free",
-                    help="free: football-data.co.uk fixtures.csv, no key, "
-                         "win markets only (default). "
-                         "api: API-Football, needs a key, adds BTTS.")
+    ap.add_argument("--source", choices=["free", "oddsapi", "api"], default="free",
+                    help="free: football-data.co.uk fixtures.csv, no key, no "
+                         "BTTS (default). "
+                         "oddsapi: The Odds API, free key, INCLUDES BTTS. "
+                         "api: API-Football -- current season needs a paid plan.")
     ap.add_argument("--mock", action="store_true",
                     help="use simulated fixtures and prices; nothing fetched")
     ap.add_argument("--date", help="target Saturday, YYYY-MM-DD (default: next one)")
@@ -204,6 +205,13 @@ def main() -> int:
         print(f"  {len(fixtures)} simulated fixtures "
               f"(prices are random — EV and edge figures are noise)")
 
+    elif args.source == "oddsapi":
+        client = oddsapi.OddsApi()
+        print("Fetching fixtures + match odds from The Odds API "
+              f"({len(oddsapi.SPORT_KEYS)} credits)...")
+        fixtures = client.fixtures_with_h2h()
+        print(f"  {len(fixtures)} upcoming fixtures across the five leagues")
+
     elif args.source == "free":
         print("Fetching fixtures.csv from football-data.co.uk (no API key needed)...")
         fixtures = fixtures_csv.load_fixtures(target, until=until)
@@ -224,6 +232,13 @@ def main() -> int:
         fixtures = api.fixtures_for_date(target, season_for(target), until=until)
         print(f"  {len(fixtures)} fixtures across the five leagues")
 
+    if args.source == "oddsapi":
+        # The Odds API returns everything upcoming, so the slot filter also
+        # does the date filtering here.
+        fixtures = [f for f in fixtures
+                    if (until is None and f.kickoff_uk.date() == target)
+                    or (until is not None and target <= f.kickoff_uk.date() <= until)]
+
     if until:
         # Whole-window mode: every kick-off counts, not just 3pm Saturday.
         three_pm = fixtures
@@ -238,6 +253,18 @@ def main() -> int:
         print("Nothing found. The fixtures file is refreshed Friday afternoons for "
               "the weekend\nand Tuesday afternoons for midweek games.")
         return 0
+
+    if args.source == "oddsapi":
+        # Stage two: one credit per surviving fixture, never per fixture in
+        # the whole file. This is what keeps a run inside the free tier.
+        print(f"\nFetching BTTS for the {len(three_pm)} shortlisted fixtures "
+              f"({len(three_pm)} credits)...")
+        client.add_btts(three_pm)
+        print(f"  {client.credits_used} credits used this month"
+              + (f", {client.credits_left} left" if client.credits_left is not None else ""))
+        if client.credits_left is not None and client.credits_left < 100:
+            print("  ! Running low. Reduce how often the job runs.")
+        print()
 
     if api is not None:
         budget = len(three_pm) + len(config.LEAGUES)
@@ -303,8 +330,9 @@ def main() -> int:
         "n_fixtures": len(resolved),
         "n_matches": len(matches),
         "mode": ("mock data" if args.mock else
-                 "football-data.co.uk fixtures.csv (win markets)"
-                 if args.source == "free" else "API-Football (win + BTTS)"),
+                 "football-data.co.uk (win markets only)" if args.source == "free"
+                 else "The Odds API (win + BTTS)" if args.source == "oddsapi"
+                 else "API-Football (win + BTTS)"),
     }
     html_out = report.render(safest, value, both, legs, meta,
                              sweet=sweet, sweet_summary=sweet_summary)

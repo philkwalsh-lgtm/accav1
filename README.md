@@ -37,16 +37,18 @@ Two bonuses from using the same source as the training data: **team names match 
 
 **The one thing it lacks is a BTTS market.** The default run gives you win legs only.
 
-### Optional: add BTTS
+### Adding BTTS
 
-If you want BTTS legs back, that needs a free [API-Football](https://dashboard.api-football.com/register) key — email and password, or sign in with Google. No card. Key lives under Account → My Access.
+The free fixtures file has no both-teams-to-score market. For that, get a free key from [the-odds-api.com](https://the-odds-api.com/) — email address, no card, 500 credits a month:
 
 ```bash
-export API_FOOTBALL_KEY=your_key_here
-python run.py --source api --open
+export ODDS_API_KEY=your_key_here
+python run.py --source oddsapi --open
 ```
 
-100 requests/day; a full Saturday uses about 45.
+A run costs about 45 credits: 5 for the match-odds sweep across the five leagues, then 1 per shortlisted fixture for BTTS. The filtering happens *before* the per-fixture spend, which is what keeps it inside the free tier.
+
+**Not API-Football.** Its free plan is capped at seasons 2022–2024 and can't see the current season — the run fails outright. Current-season access is $19/month. `--source api` is still there if you ever pay for it.
 
 ---
 
@@ -58,8 +60,7 @@ python run.py --date 2026-08-22  # a specific Saturday
 python run.py --open             # open the HTML when done
 python run.py doctor             # check your setup
 python run.py --mock             # simulated data, fetches nothing
-python run.py --source api       # adds BTTS legs (needs the free key)
-python run.py verify             # check API-Football league ids (api source only)
+python run.py --source oddsapi   # adds BTTS legs (free key from the-odds-api.com)
 python run.py --refresh          # re-download historical results
 ```
 
@@ -102,10 +103,10 @@ Walks forward through last season, refitting the model on only what was known at
 football-data.co.uk history CSVs  →  Dixon-Coles model  →  probabilities
                                                                 ↓
 football-data.co.uk fixtures.csv  →  3pm filter  →  rank  →  HTML
-  (fixtures + odds, no key)                          ↑
+  (fixtures + win odds, no key)                      ↑
                                                      │
-API-Football (optional, free key) ───────────────────┘
-  adds the BTTS market
+The Odds API (free key) ─────────────────────────────┘
+  fixtures + win odds + BTTS
 ```
 
 **The model** gives each team an attack and a defence rating plus one global home-advantage term, fitted by maximum likelihood with exponential time decay (180-day half-life, so a result six months ago counts half as much as yesterday's). Dixon-Coles adds a correction for low-scoring games, because plain Poisson underrates 0-0 and 1-1 — exactly the scorelines that decide BTTS.
@@ -141,7 +142,7 @@ That second one is the bigger deal, and it's why the sweet spot is a better plac
 
 **The BST trap.** From late March to late October, UK clocks are on BST and 3pm local is **14:00 UTC**. Filter on UTC and you silently drop every fixture for half the season. The tool converts to `Europe/London` and compares on local time; `tests/test_pipeline.py` has a regression test for exactly this.
 
-**Team names — only on the API source.** API-Football says "Nottingham Forest", football-data.co.uk says "Nott'm Forest". `accatool/names.py` handles this with an alias table plus fuzzy matching, and **prints anything it can't match** rather than dropping it quietly. If you see a warning, add the name to `ALIASES`. On the free source this problem doesn't exist — fixtures and history come from the same place, so the names are already identical.
+**Team names — on the API sources only.** The Odds API says "Nottingham Forest", football-data.co.uk says "Nott'm Forest". `accatool/names.py` handles this with an alias table plus fuzzy matching, and **prints anything it can't match** rather than dropping it quietly. If you see a warning, add the name to `ALIASES`. On the free source this problem doesn't exist — fixtures and history come from the same place, so the names are already identical.
 
 **Which price you're comparing.** On the free source, the price credited to a leg is the **best available** (`MaxH/D/A`) while the edge is measured against the **market average** (`AvgH/D/A`). Two different jobs: you'd take the best price, but the average is the more stable read on what the market thinks — a Max quote is by construction the most extreme of six firms, so on any one outcome it can be a single bookmaker's error rather than a signal.
 
@@ -184,7 +185,8 @@ python tests/test_pipeline.py   # full pipeline, BST handling, de-vig maths
 | `accatool/model.py` | Dixon-Coles fit and predict |
 | `accatool/fixtures_csv.py` | free fixtures + odds, no key (default source) |
 | `accatool/demo.py` | synthetic data for offline `--mock` runs |
-| `accatool/odds.py` | API-Football client + mock mode |
+| `accatool/oddsapi.py` | The Odds API client — win odds + BTTS |
+| `accatool/odds.py` | API-Football client (paid only) + mock mode |
 | `accatool/names.py` | team-name matching between the two sources |
 | `accatool/rank.py` | the two columns, de-vigging, acca maths |
 | `accatool/report.py` | HTML output |

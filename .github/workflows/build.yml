@@ -1,14 +1,17 @@
 name: Build shortlist
 
-# Saturday 3pm games only, for now. Friday evening once the weekend odds are
-# up, then again Saturday morning for the freshest prices. Plus a button in
+# Saturday 3pm games. One scheduled run on Saturday morning, plus a button in
 # the Actions tab whenever you want it rebuilt.
+#
+# Why only once: The Odds API's free tier is 500 credits/month and a run costs
+# about 45 (5 for the league sweep, 1 per shortlisted fixture for BTTS). One
+# scheduled run a week is ~195/month, leaving ~300 spare for manual rebuilds.
+# Two scheduled runs would be ~390 and leave almost nothing.
 #
 # To cover other days later, edit SLOTS in accatool/config.py -- one line.
 on:
   schedule:
-    - cron: '0 18 * * 5'   # Friday 18:00 UTC — weekend odds are up
-    - cron: '0 8  * * 6'   # Saturday 08:00 UTC — freshest before kick-off
+    - cron: '0 8 * * 6'    # Saturday 08:00 UTC (09:00 UK)
   workflow_dispatch:
 
 permissions:
@@ -29,9 +32,9 @@ jobs:
 
       - name: Build the page
         env:
-          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
         run: |
-          python run.py --source api --out docs/index.html
+          python run.py --source oddsapi --out docs/index.html
 
       # If the run found no fixtures it exits without writing, so there is
       # nothing to commit and the previous page stays up. Better a page that

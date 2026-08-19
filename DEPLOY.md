@@ -7,8 +7,10 @@ You'll end up with:
 - **A page at `https://<your-username>.github.io/acca-shortlist/`** — open on any phone, no login, no app.
 - **Saturday 3pm games**, which is what the group actually plays.
 - **Rebuilt automatically** Friday evening and Saturday morning, plus a button for on-demand.
-- **BTTS included**, because it runs against API-Football.
+- **BTTS included**, via The Odds API's free tier.
 - **Your API key encrypted** in GitHub secrets. Never in the code, never in the page, never in a chat.
+
+> **Note on API-Football.** Don't use it. Its free plan is capped at seasons 2022–2024 and cannot see the current season at all — the run fails with *"Free plans do not have access to this season"*. Their marketing says all plans include all features, which is true of endpoints and false of seasons. Current-season access starts at $19/month. **The Odds API** has no season restriction and covers all betting markets on its free tier, so that's what this uses.
 
 ---
 
@@ -31,13 +33,15 @@ Drag in **everything from the unzipped `acca` folder**. Two things people miss:
 
 Then **Commit changes**.
 
-## Step 3 — Add your API key
+## Step 3 — Get a key and add it
 
-1. In the repo: **Settings** → **Secrets and variables** → **Actions**.
-2. **New repository secret**.
-3. Name: `API_FOOTBALL_KEY` — spelled exactly that, capitals and underscores.
-4. Secret: paste your key from API-Football (Account → My Access).
-5. **Add secret**.
+Free key from **[the-odds-api.com](https://the-odds-api.com/)** — email address, no card. 500 credits a month. They email the key straight back.
+
+Then in the repo: **Settings** → **Secrets and variables** → **Actions** → **New repository secret**.
+
+1. Name: `ODDS_API_KEY` — spelled exactly that, capitals and underscores.
+2. Secret: paste the key.
+3. **Add secret**.
 
 Once saved, GitHub encrypts it. Nobody can read it back out, including you — if you lose it, regenerate on API-Football and paste the new one.
 
@@ -69,8 +73,8 @@ Just send the URL. No accounts, no installs. It works on a phone, and everyone c
 
 ## Running it again
 
-- **Automatic:** Friday 19:00 UK (once the weekend prices are up) and Saturday 09:00 UK (freshest before kick-off).
-- **On demand:** Actions → Build shortlist → Run workflow.
+- **Automatic:** Saturday 09:00 UK. Once a week, to stay well inside the credit allowance.
+- **On demand:** Actions → Build shortlist → Run workflow. Each one costs ~45 credits.
 
 If a run finds no fixtures, it exits without writing anything and the previous page stays up. Better a slightly old page than an empty one.
 
@@ -82,10 +86,16 @@ If a run finds no fixtures, it exits without writing anything and the previous p
 |---|---|
 | GitHub account, repo, Pages | £0 |
 | GitHub Actions (public repo) | £0, unlimited |
-| API-Football free tier | £0 — 100 requests/day |
+| The Odds API free tier | £0 — 500 credits/month |
 | **Total** | **£0/month** |
 
-A Saturday 3pm round is 35–45 fixtures, so about 40–50 requests per run against a free allowance of 100 per day. Two scheduled runs plus a manual one all fit comfortably. If you widen the net later, the tool warns you before it blows the quota.
+**How the credits work**, because this is the one real constraint. The Odds API charges 1 credit per league for the match-result sweep — which returns every fixture regardless of how many there are — and 1 credit per *fixture* for BTTS, from a separate endpoint.
+
+So the tool pulls match odds for all five leagues (5 credits), throws away everything that isn't a 3pm Saturday kick-off, and *only then* spends a credit each on BTTS for the ~40 survivors. About **45 credits a run**.
+
+Fetching BTTS before filtering would cost ~130 a run and drain the month's allowance in a fortnight. Nothing would error — the page would just stop updating. There's a test pinning that ordering for exactly this reason.
+
+At 45 a run: the weekly scheduled build uses ~195/month, leaving ~300 spare — roughly six manual rebuilds. The tool prints your remaining balance after every run and warns when you drop below 100.
 
 ---
 
@@ -115,16 +125,7 @@ Two things to watch when you do widen it. More fixtures means more API requests 
 
 Two things worth doing once it's live, in this order.
 
-**1. Check the league ids.** On your Mac:
-
-```bash
-export API_FOOTBALL_KEY=your_key_here
-python3 run.py verify
-```
-
-Confirms the five league ids match what your key actually sees. Thirty seconds.
-
-**2. Tune the form weighting empirically.** The model currently weights a result from six months ago at half of yesterday's. That's a sensible default, not a proven one — and it's the thing you flagged. Settle it with data rather than opinion:
+**1. Tune the form weighting empirically.** The model currently weights a result from six months ago at half of yesterday's. That's a sensible default, not a proven one — and it's the thing you flagged. Settle it with data rather than opinion:
 
 ```bash
 python3 backtest.py --season 2526 --legs 6
@@ -147,7 +148,11 @@ Once you know the best half-life, set `HALF_LIFE_DAYS` in `accatool/config.py`, 
 
 ## Troubleshooting
 
-**Actions run fails on the API key.** The secret name has to be exactly `API_FOOTBALL_KEY`. Check for a trailing space in the pasted value.
+**Actions run fails on the API key.** The secret name has to be exactly `ODDS_API_KEY`. Check for a trailing space in the pasted value.
+
+**"Free plans do not have access to this season".** That's API-Football, not The Odds API — make sure the workflow says `--source oddsapi`.
+
+**429 / out of credits.** You've used the month's 500. It resets on your signup date. Until then, switch the workflow to `--source free` for win-only markets at no cost.
 
 **Page shows mock data with a red banner.** That's the placeholder from before the first real run. Trigger the workflow.
 
