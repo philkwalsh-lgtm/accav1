@@ -1,0 +1,50 @@
+name: Build shortlist
+
+# Saturday 3pm games only, for now. Friday evening once the weekend odds are
+# up, then again Saturday morning for the freshest prices. Plus a button in
+# the Actions tab whenever you want it rebuilt.
+#
+# To cover other days later, edit SLOTS in accatool/config.py -- one line.
+on:
+  schedule:
+    - cron: '0 18 * * 5'   # Friday 18:00 UTC — weekend odds are up
+    - cron: '0 8  * * 6'   # Saturday 08:00 UTC — freshest before kick-off
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Build the page
+        env:
+          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+        run: |
+          python run.py --source api --out docs/index.html
+
+      # If the run found no fixtures it exits without writing, so there is
+      # nothing to commit and the previous page stays up. Better a page that
+      # is a few days old than an empty one.
+      - name: Publish
+        run: |
+          if [ -n "$(git status --porcelain docs/)" ]; then
+            git config user.name  "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add docs/
+            git commit -m "Update shortlist $(date -u +'%Y-%m-%d %H:%M')"
+            git push
+            echo "Published."
+          else
+            echo "No change — leaving the existing page up."
+          fi
