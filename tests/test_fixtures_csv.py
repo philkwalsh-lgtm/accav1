@@ -183,9 +183,74 @@ def test_slots_are_configurable():
     print("  PASS slots are configurable")
 
 
+def test_thin_legs_excluded_from_value_and_sweet():
+    """Reproduce the failure seen live and prove the fix.
+
+    On the published page, Best value was led by Derby County at 8.00 with the
+    model claiming 28% against a market implying ~11% -- on the back of a team
+    it had barely seen. That isn't bad luck, it's structural: thin data gives
+    an unreliable rating, an unreliable rating disagrees loudly with the
+    market, and the value ranking sorts by exactly that disagreement. So the
+    model's worst guesses win the list it is least qualified to win.
+    """
+    from accatool.odds import Fixture
+
+    m = model.DivisionModel(
+        div="E1", teams=["Solid A", "Solid B", "Newcomer"],
+        attack={"Solid A": 0.10, "Solid B": 0.05, "Newcomer": 0.95},
+        defence={"Solid A": -0.10, "Solid B": -0.05, "Newcomer": 0.30},
+        home_adv=0.26, rho=-0.05,
+        # Newcomer's rating rests on a fraction of the evidence the others have.
+        evidence={"Solid A": 40.0, "Solid B": 38.0, "Newcomer": 2.0},
+        median_evidence=38.0)
+
+    def fx(home, away, price):
+        f = Fixture(0, "E1", "Championship",
+                    dt.datetime(2026, 8, 22, 14, 0, tzinfo=dt.timezone.utc),
+                    home, away,
+                    odds={"HOME": price, "DRAW": 3.6, "AWAY": 4.0})
+        f.model_home, f.model_away = home, away
+        return f
+
+    legs, _ = rank.build_legs(
+        [fx("Newcomer", "Solid A", 8.00), fx("Solid B", "Solid A", 2.10)],
+        {"E1": m})
+
+    thin = [l for l in legs if l.has_thin]
+    clean = [l for l in legs if not l.has_thin]
+    assert thin and clean, "test needs both a thin and a clean leg"
+
+    best_thin = max(thin, key=lambda l: l.ev)
+    best_clean = max(clean, key=lambda l: l.ev)
+    print(f"  thin leg  : {best_thin.label:24s} @{best_thin.odds:.2f} "
+          f"we say {best_thin.prob*100:.0f}%  EV {best_thin.ev*100:+.0f}%")
+    print(f"  clean leg : {best_clean.label:24s} @{best_clean.odds:.2f} "
+          f"we say {best_clean.prob*100:.0f}%  EV {best_clean.ev*100:+.0f}%")
+
+    # The premise of the bug: unfiltered, the thin leg outranks the clean one.
+    assert best_thin.ev > best_clean.ev, (
+        "test premise broken -- the thin leg should look best on EV")
+
+    safest, value, both = rank.shortlists(legs)
+    sweet = rank.sweet_spot(legs)
+    held = rank.held_back(legs)
+
+    assert not any(l.has_thin for l in value), \
+        "a thin leg reached Best value: " + str([l.label for l in value if l.has_thin])
+    assert not any(l.has_thin for l in sweet), \
+        "a thin leg reached Best picks"
+    assert held, "held-back legs must be reported, not silently dropped"
+
+    print(f"  after the fix: Best value = {[l.label for l in value]}")
+    print(f"  held back and explained on the page: {len(held)} leg(s)")
+    print("  PASS thin legs no longer win the lists they corrupt")
+
+
 if __name__ == "__main__":
     print("test_parsing");                 test_parsing()
     print("test_price_vs_fair_source");    test_price_vs_fair_source()
     print("test_devig_source_changes_edge"); test_devig_source_changes_edge()
     print("test_slots_are_configurable"); test_slots_are_configurable()
+    print("test_thin_legs_excluded_from_value_and_sweet")
+    test_thin_legs_excluded_from_value_and_sweet()
     print("\nAll fixtures.csv tests passed.")

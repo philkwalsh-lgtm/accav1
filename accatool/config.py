@@ -44,6 +44,27 @@ SWEET_SPOT_MIN_PROB = 0.55   # must land at least this often
 SWEET_SPOT_MIN_EDGE = 0.03   # must beat the fair price by 3+ percentage points
 SWEET_SPOT_SIZE = 10
 
+# ------------------------------------------------------- thin-evidence policy
+# A team the model has barely seen -- promoted over the summer, or a few games
+# into a season -- gets a rating estimated from almost nothing. Those ratings
+# are not merely uncertain, they are BIASED TOWARDS BEING SELECTED, and that
+# is the whole problem:
+#
+#   thin data -> unreliable rating -> loud disagreement with the market
+#               -> large apparent edge -> straight to the top of the rankings
+#
+# So the lists that reward disagreement fill up with the model's worst guesses.
+# Observed live: an 8.00 shot the model called 28% (market ~11%) topping Best
+# value, on the back of a team with almost no history.
+#
+# The two lists that rank on disagreement therefore exclude thin legs outright.
+# "Most likely to win" ranks on plain probability, rewards agreeing with the
+# obvious, and is far less distorted -- thin legs stay there, tagged. Every
+# thin leg still appears in the full table at the bottom, so nothing is hidden.
+EXCLUDE_THIN_FROM_SWEET = True
+EXCLUDE_THIN_FROM_VALUE = True
+EXCLUDE_THIN_FROM_SAFEST = False
+
 # Markets we will consider. BTTS "No" is deliberately excluded --
 # your rule is "win or BTTS", and BTTS-No is neither.
 MARKETS = ("HOME", "AWAY", "BTTS")

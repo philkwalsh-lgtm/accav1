@@ -157,16 +157,37 @@ def build_legs(fixtures, models) -> tuple[list[Leg], list[str]]:
 
 
 def shortlists(legs: list[Leg], size: int | None = None):
-    """The two columns, plus the legs that appear in both."""
+    """The two columns, plus the legs that appear in both.
+
+    Best value excludes legs resting on a team the model barely knows. See the
+    note on EXCLUDE_THIN_FROM_* in config -- thin ratings don't just add noise
+    to this list, they systematically win it.
+    """
     size = size or config.SHORTLIST_SIZE
 
-    safest = sorted(legs, key=lambda l: l.prob, reverse=True)[:size]
-    value = sorted(legs, key=lambda l: l.ev, reverse=True)[:size]
+    safest_pool = ([l for l in legs if not l.has_thin]
+                   if config.EXCLUDE_THIN_FROM_SAFEST else legs)
+    value_pool = ([l for l in legs if not l.has_thin]
+                  if config.EXCLUDE_THIN_FROM_VALUE else legs)
+
+    safest = sorted(safest_pool, key=lambda l: l.prob, reverse=True)[:size]
+    value = sorted(value_pool, key=lambda l: l.ev, reverse=True)[:size]
 
     key = lambda l: (l.home, l.away, l.market)
     both = {key(l) for l in safest} & {key(l) for l in value}
 
     return safest, value, both
+
+
+def held_back(legs: list[Leg]) -> list[Leg]:
+    """Legs kept out of the ranked lists because the model barely knows a team.
+
+    Returned so the page can say how many were withheld and why, rather than
+    quietly shrinking the lists.
+    """
+    if not (config.EXCLUDE_THIN_FROM_SWEET or config.EXCLUDE_THIN_FROM_VALUE):
+        return []
+    return [l for l in legs if l.has_thin]
 
 
 def sweet_spot(legs: list[Leg], min_prob=None, min_edge=None, size=None) -> list[Leg]:
@@ -183,7 +204,9 @@ def sweet_spot(legs: list[Leg], min_prob=None, min_edge=None, size=None) -> list
     min_edge = config.SWEET_SPOT_MIN_EDGE if min_edge is None else min_edge
     size = size or config.SWEET_SPOT_SIZE
 
-    qualifying = [l for l in legs if l.prob >= min_prob and l.edge >= min_edge]
+    pool = ([l for l in legs if not l.has_thin]
+            if config.EXCLUDE_THIN_FROM_SWEET else legs)
+    qualifying = [l for l in pool if l.prob >= min_prob and l.edge >= min_edge]
     # Rank by EV: it's what determines return per pound staked. Probability
     # has already done its job as a gate.
     return sorted(qualifying, key=lambda l: l.ev, reverse=True)[:size]

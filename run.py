@@ -296,6 +296,11 @@ def main() -> int:
     safest, value, both = rank.shortlists(legs)
     sweet = rank.sweet_spot(legs)
     sweet_summary = rank.acca_summary(sweet[:6])
+    held = rank.held_back(legs)
+    if held:
+        teams = sorted({t.strip() for l in held for t in l.thin.split(",") if t.strip()})
+        print(f"  {len(held)} leg(s) held back -- model has too little data on: "
+              f"{', '.join(teams[:8])}{' ...' if len(teams) > 8 else ''}")
     print(f"  {len(both)} leg(s) appear in both columns\n")
 
     print(f"SWEET SPOT  (>= {config.SWEET_SPOT_MIN_PROB*100:.0f}% likely "
@@ -335,7 +340,7 @@ def main() -> int:
                  else "API-Football (win + BTTS)"),
     }
     html_out = report.render(safest, value, both, legs, meta,
-                             sweet=sweet, sweet_summary=sweet_summary)
+                             sweet=sweet, sweet_summary=sweet_summary, held=held)
 
     out_path = pathlib.Path(args.out).resolve()
     out_path.write_text(html_out, encoding="utf-8")

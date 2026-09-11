@@ -325,6 +325,29 @@ SLIP_JS = """
 """
 
 
+def _held_note(held):
+    """Say plainly that some picks were withheld, and why.
+
+    Silently shortening a list is worse than not filtering at all -- it looks
+    like the week was quiet when actually the tool binned its own worst
+    guesses.
+    """
+    if not held:
+        return ""
+    teams = sorted({t.strip() for l in held for t in l.thin.split(",") if t.strip()})
+    shown = ", ".join(teams[:6]) + (" and others" if len(teams) > 6 else "")
+    return f"""<div class="note"><b>{len(held)} pick{"s" if len(held) != 1 else ""}
+      held back from the ranked lists.</b> They involve teams the model has barely
+      seen &mdash; {html.escape(shown)} &mdash; usually promoted or relegated sides,
+      or clubs a couple of games into a season.
+      <br>A thin rating doesn't just make a pick uncertain, it makes it
+      <em>more likely to be chosen</em>: little data gives an unreliable number,
+      an unreliable number disagrees loudly with the bookies, and disagreeing
+      loudly is exactly what "best value" rewards. Left alone, this page fills
+      up with the model's worst guesses dressed as its best ideas.
+      They're all still listed at the bottom if you want to judge for yourself.</div>"""
+
+
 def _fake_banner(meta):
     """Mock mode has to be impossible to miss.
 
@@ -429,7 +452,8 @@ def _all_fixtures_table(legs):
     </details>"""
 
 
-def render(safest, value, both_keys, all_legs, meta, sweet=None, sweet_summary=None) -> str:
+def render(safest, value, both_keys, all_legs, meta, sweet=None, sweet_summary=None,
+           held=None) -> str:
     generated = dt.datetime.now(config.UK).strftime("%a %d %b %Y, %H:%M")
     show_when = bool(meta.get("window"))
 
@@ -487,6 +511,8 @@ def render(safest, value, both_keys, all_legs, meta, sweet=None, sweet_summary=N
   </div>
 
   <div class="note">{both_note}</div>
+
+  {_held_note(held or [])}
 
   <div class="note"><b>What the numbers mean.</b><br>
     <b>Odds</b> — the bookmaker's price. 2.50 means a £10 bet returns £25 if it wins.<br>
